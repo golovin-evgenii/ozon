@@ -3,16 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Метка версии в заголовке вкладки браузера -->
-    <title>Ozon Profit Report (Версия 4.0 - Force Fix)</title>
+    <title>Ozon Profit Report (Версия 4.1 - Anti-Bug Fix)</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f6f8; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         
-        /* Стили для метки версии */
         .version-badge {
             display: inline-block;
-            background: #e74c3c;
+            background: #27ae60; /* Зеленый цвет для успеха */
             color: white;
             padding: 4px 10px;
             border-radius: 20px;
@@ -82,9 +80,8 @@
 <body>
 
 <div class="container">
-    <!-- Заголовок с версией -->
-    <h1>Ozon Profit Report <span class="version-badge">Версия 4.0</span></h1>
-    <div class="version-date">Обновлено: 01.09.2025 14:30 (МСК) — Полная замена кода</div>
+    <h1>Ozon Profit Report <span class="version-badge">Версия 4.1</span></h1>
+    <div class="version-date">Обновлено: 01.09.2025 15:00 (МСК) — Исправлена ошибка типа Blob</div>
     
     <div class="stats" id="statsArea" style="display:none;">
         <div class="stat-card">
@@ -137,29 +134,48 @@
 </div>
 
 <script>
-    // 1. Метка в консоли браузера
-    console.log('%c✅ Страница обновлена. Версия 4.0 (Force Fix)', 'color: green; font-size: 16px; font-weight: bold;');
+    console.log('%c✅ Страница загружена. Версия 4.1 (Исправлен тип Blob)', 'color: green; font-size: 16px; font-weight: bold;');
 
     let ozonData = [];
 
-    const fileInput = document.getElementById('fileInput');
-    if (fileInput) {
-        fileInput.addEventListener('change', handleFileSelect, { once: true });
-    }
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', () => {
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) {
+            // Убрали {once: true}, чтобы событие не пропадало
+            fileInput.addEventListener('change', handleFileSelect);
+        }
+    });
 
     function handleFileSelect(e) {
+        // ГЛАВНОЕ ИСПРАВЛЕНИЕ:
+        // Берем файл напрямую из target.files, без лишних проверок на клонирование
         const file = e.target.files;
         const msgBox = document.getElementById('msgBox');
         
+        // Сброс сообщений
         msgBox.className = 'messages';
         msgBox.style.display = 'none';
 
-        if (!file) return;
+        if (!file) {
+            console.warn('Файл не выбран');
+            return;
+        }
+
+        // Проверка типа файла (опционально)
+        if (file.type !== '' && !file.type.includes('text') && !file.type.includes('csv')) {
+             // Для CSV тип часто пустой, поэтому не блокируем жестко, но логируем
+        }
 
         const reader = new FileReader();
 
         reader.onload = function(e) {
             const text = e.target.result;
+            // Если текст пустой или мусор - это проблема файла, а не кода
+            if (!text || text.length < 10) {
+                showError('Файл слишком маленький или пустой. Проверьте выгрузку из ЛК Ozon.');
+                return;
+            }
             parseOzonCSV(text);
             
             msgBox.innerText = `Файл "\${file.name}" успешно загружен!`;
@@ -169,14 +185,20 @@
 
         reader.onerror = function(e) {
             console.error("Ошибка чтения файла:", e);
-            showError("Ошибка чтения файла. Убедитесь, что это текстовый CSV.");
+            showError("Ошибка чтения файла. Попробуйте сохранить CSV в Блокноте как UTF-8 еще раз.");
         };
 
+        // Читаем строго как UTF-8
         reader.readAsText(file, 'utf-8');
+        
+        // ВАЖНО: Очищаем значение инпута, чтобы можно было выбрать ТОТ ЖЕ файл снова
+        // Это решает проблему, когда второй клик не срабатывает
+        e.target.value = ''; 
     }
 
     function parseOzonCSV(text) {
         ozonData = [];
+        // Разбиваем строки корректно для Windows и Mac
         const lines = text.split(/\r?\n/);
         
         if (lines.length < 2) {
@@ -185,6 +207,7 @@
         }
 
         const firstLine = lines; 
+        // Определяем разделитель: если есть точка с запятой - это русский CSV
         const delimiter = firstLine.includes(';') ? ';' : ',';
 
         const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().trim());
@@ -317,13 +340,11 @@
         document.getElementById('tableBody').innerHTML = '';
         document.getElementById('dataTable').classList.add('hidden');
         document.getElementById('statsArea').style.display = 'none';
-        document.getElementById('fileInput').value = '';
         document.getElementById('msgBox').style.display = 'none';
         
+        // Просто очищаем инпут, не клонируем его. Это надежнее.
         const input = document.getElementById('fileInput');
-        const clone = input.cloneNode(true);
-        input.parentNode.replaceChild(clone, input);
-        clone.addEventListener('change', handleFileSelect, { once: true });
+        input.value = '';
     }
 
     function showError(msg) {
