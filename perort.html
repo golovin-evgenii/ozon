@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ozon Profit Report (Версия 4.2 - Anti-Undefined Fix)</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f6f8; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        
+        .version-badge {
+            display: inline-block;
+            background: #8e44ad; /* Фиолетовый для новой версии */
+            color: white;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        .version-date { color: #7f8c8d; font-size: 13px; margin-top: 5px; font-style: italic; }
+
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        
+        .upload-zone {
+            border: 2px dashed #3498db;
+            padding: 40px;
+            text-align: center;
+            background: #f9fbfd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        .upload-zone:hover { background: #eef2f7; border-color: #2980b9; }
+        .upload-zone input[type="file"] { display: none; }
+        .upload-btn {
+            background: #3498db;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        .upload-btn:hover { background: #2980b9; }
+
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+        button.action-btn {
+            padding: 10px 20px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        
+        .stats { display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap; }
+        .stat-card { background: #3498db; color: white; padding: 15px; border-radius: 5px; min-width: 150px; text-align: center; }
+        
+        .messages { margin-top: 10px; padding: 10px; border-radius: 5px; display: none; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Ozon Profit Report <span class="version-badge">Версия 4.2</span></h1>
+    <div class="version-date">Обновлено: 01.09.2025 16:00 (МСК) — Исправлена ошибка undefined function</div>
+    
+    <div class="stats" id="statsArea" style="display:none;">
+        <div class="stat-card">
+            <h3>Всего строк</h3>
+            <p id="totalRows">0</p>
+        </div>
+        <div class="stat-card">
+            <h3>Выручка</h3>
+            <p id="totalRevenue">0 ₽</p>
+        </div>
+        <div class="stat-card">
+            <h3>Комиссия Ozon</h3>
+            <p id="totalCommission">0 ₽</p>
+        </div>
+        <div class="stat-card">
+            <h3>Логистика</h3>
+            <p id="totalLogistics">0 ₽</p>
+        </div>
+    </div>
+
+    <div class="upload-zone" onclick="triggerFileInput()">
+        <input type="file" id="fileInput" accept=".csv,.txt">
+        <h3>Нажмите сюда или выберите файл ниже</h3>
+        <p style="color: #7f8c8d;">Важно: файл должен быть в кодировке UTF-8.</p>
+        <button class="upload-btn">Выбрать файл отчета</button>
+    </div>
+
+    <div class="controls">
+        <button class="action-btn" onclick="clearData()">Очистить данные</button>
+    </div>
+
+    <div id="msgBox" class="messages"></div>
+
+    <table id="dataTable" class="hidden">
+        <thead>
+            <tr>
+                <th>Дата</th>
+                <th>SKU</th>
+                <th>Название</th>
+                <th>Цена покупателя</th>
+                <th>Ваша цена</th>
+                <th>Комиссия</th>
+                <th>Логистика</th>
+                <th>Кол-во</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+        </tbody>
+    </table>
+</div>
+
+<script>
+    console.log('%c✅ Страница загружена. Версия 4.2 (Защита от undefined)', 'color: purple; font-size: 16px; font-weight: bold;');
+
+    let ozonData = [];
+
+    // Функция для безопасного вызова выбора файла
+    function triggerFileInput() {
+        const input = document.getElementById('fileInput');
+        if (input) {
+            input.click();
+        } else {
+            console.error('Ошибка: Элемент fileInput не найден!');
+        }
+    }
+
+    // Инициализация после загрузки DOM
+    document.addEventListener('DOMContentLoaded', () => {
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) {
+            // Навешиваем событие напрямую, без риска потерять ссылку на функцию
+            fileInput.addEventListener('change', handleFileSelect);
+        } else {
+            console.error('Ошибка: Не удалось найти input для файла.');
+        }
+    });
+
+    function handleFileSelect(e) {
+        const file = e.target.files;
+        const msgBox = document.getElementById('msgBox');
+        
+        msgBox.className = 'messages';
+        msgBox.style.display = 'none';
+
+        if (!file) {
+            console.warn('Файл не выбран пользователем.');
+            return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            const text = e.target.result;
+            if (!text || text.length < 10) {
+                showError('Файл пуст или поврежден. Проверьте выгрузку из ЛК Ozon.');
+                return;
+            }
+            parseOzonCSV(text);
+            
+            msgBox.innerText = `Файл "\${file.name}" успешно загружен!`;
+            msgBox.className = 'messages success';
+            msgBox.style.display = 'block';
+        };
+
+        reader.onerror = function(e) {
+            console.error("Ошибка чтения файла:", e);
+            showError("Ошибка чтения файла. Попробуйте пересохранить CSV в Блокноте.");
+        };
+
+        // Читаем строго как UTF-8
+        reader.readAsText(file, 'utf-8');
+        
+        // Сбрасываем значение, чтобы можно было выбрать тот же файл повторно
+        e.target.value = ''; 
+    }
+
+    function parseOzonCSV(text) {
+        ozonData = [];
+        const lines = text.split(/\r?\n/);
+        
+        if (lines.length < 2) {
+            showError('Файл содержит только заголовки или пуст.');
+            return;
+        }
+
+        const firstLine = lines; 
+        const delimiter = firstLine.includes(';') ? ';' : ',';
+
+        const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().trim());
+
+        const colMap = {
+            date: findColumnIndex(headers, ['дата отгрузки', 'дата заказа', 'дата']),
+            sku: findColumnIndex(headers, ['sku', 'артикул']),
+            name: findColumnIndex(headers, ['название товара', 'наименование', 'название']),
+            pricePaid: findColumnIndex(headers, ['оплачено покупателем', 'сумма к оплате', 'итого к перечислению']),
+            priceYour: findColumnIndex(headers, ['ваша цена', 'цена продажи', 'цена']),
+            logistics: findColumnIndex(headers, ['стоимость доставки', 'логистика', 'эквайринг и последняя миля']),
+            quantity: findColumnIndex(headers, ['количество'])
+        };
+
+        if (colMap.date === -1 || colMap.sku === -1 || colMap.pricePaid === -1) {
+            let missing = [];
+            if(colMap.date === -1) missing.push('дата');
+            if(colMap.sku === -1) missing.push('sku/артикул');
+            if(colMap.pricePaid === -1) missing.push('цена покупателя');
+            
+            showError('Не найдены обязательные колонки: ' + missing.join(', ') + '. Проверьте выгрузку из ЛК Ozon.');
+            return;
+        }
+
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            const parts = parseCSVLine(line, delimiter);
+            if (parts.length <= colMap.pricePaid) continue;
+
+            const cleanNumber = (val) => {
+                if (typeof val !== 'string') return 0;
+                const cleaned = val.replace(/"/g, '').replace(/\s+/g, '').replace(',', '.');
+                const num = parseFloat(cleaned);
+                return isNaN(num) ? 0 : num;
+            };
+
+            const yourPrice = cleanNumber(parts[colMap.priceYour]);
+            const paidPrice = cleanNumber(parts[colMap.pricePaid]);
+            const commission = yourPrice - paidPrice;
+
+            ozonData.push({
+                date: parts[colMap.date] ? parts[colMap.date].replace(/"/g, '').trim() : 'N/A',
+                sku: parts[colMap.sku] ? parts[colMap.sku].replace(/"/g, '').trim() : 'N/A',
+                name: parts[colMap.name] ? parts[colMap.name].replace(/"/g, '') : 'N/A',
+                price: paidPrice,
+                commission: commission > 0 ? commission : 0,
+                logistics: colMap.logistics !== -1 ? cleanNumber(parts[colMap.logistics]) : 0,
+                quantity: cleanNumber(parts[colMap.quantity])
+            });
+        }
+
+        renderTable();
+        updateStats();
+    }
+
+    function parseCSVLine(line, delimiter) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === delimiter && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current);
+        return result;
+    }
+
+    function findColumnIndex(headers, possibleNames) {
+        for (const name of possibleNames) {
+            const index = headers.findIndex(h => h.includes(name.toLowerCase()));
+            if (index !== -1) return index;
+        }
+        return -1;
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        
+        ozonData.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>\${row.date}</td>
+                <td>\${row.sku}</td>
+                <td>\${row.name}</td>
+                <td>\${row.price.toLocaleString('ru-RU')}</td>
+                <td>\${(row.price + row.commission).toLocaleString('ru-RU')}</td>
+                <td>\${row.commission.toLocaleString('ru-RU')}</td>
+                <td>\${row.logistics.toLocaleString('ru-RU')}</td>
+                <td>\${row.quantity}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('dataTable').classList.remove('hidden');
+    }
+
+    function updateStats() {
+        const totalRevenue = ozonData.reduce((sum, item) => sum + item.price, 0);
+        const totalCommission = ozonData.reduce((sum, item) => sum + item.commission, 0);
+        const totalLogistics = ozonData.reduce((sum, item) => sum + item.logistics, 0);
+
+        document.getElementById('totalRows').innerText = ozonData.length;
+        document.getElementById('totalRevenue').innerText = totalRevenue.toLocaleString('ru-RU') + ' ₽';
+        document.getElementById('totalCommission').innerText = totalCommission.toLocaleString('ru-RU') + ' ₽';
+        document.getElementById('totalLogistics').innerText = totalLogistics.toLocaleString('ru-RU') + ' ₽';
+        
+        document.getElementById('statsArea').style.display = 'flex';
+    }
+
+    function clearData() {
+        ozonData = [];
+        document.getElementById('tableBody').innerHTML = '';
+        document.getElementById('dataTable').classList.add('hidden');
+        document.getElementById('statsArea').style.display = 'none';
+        document.getElementById('msgBox').style.display = 'none';
+        
+        const input = document.getElementById('fileInput');
+        if (input) input.value = '';
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('msgBox');
+        el.innerText = msg;
+        el.className = 'messages error';
+        el.style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
