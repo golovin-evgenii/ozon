@@ -3,32 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ozon Profit Report</title>
+    <title>Ozon Profit Report v3</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f6f8; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
-        .controls { margin-bottom: 20px; padding: 15px; background: #eef2f7; border-radius: 5px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-        input[type="file"] { padding: 10px; border: 2px dashed #3498db; border-radius: 5px; cursor: pointer; background: #fff; }
-        button { padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #2980b9; }
+        
+        /* Стили для зоны загрузки */
+        .upload-zone {
+            border: 2px dashed #3498db;
+            padding: 40px;
+            text-align: center;
+            background: #f9fbfd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-zone:hover { background: #eef2f7; border-color: #2980b9; }
+        .upload-zone input[type="file"] { display: none; }
+        .upload-btn {
+            background: #3498db;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .upload-btn:hover { background: #2980b9; }
+
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+        button.action-btn {
+            padding: 10px 20px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button.action-btn:hover { background: #c0392b; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background-color: #3498db; color: white; }
         tr:nth-child(even) { background-color: #f9f9f9; }
+        
         .stats { display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap; }
         .stat-card { background: #3498db; color: white; padding: 15px; border-radius: 5px; min-width: 150px; text-align: center; }
-        .error { color: #e74c3c; margin-top: 10px; display: none; }
+        
+        .messages { margin-top: 10px; padding: 10px; border-radius: 5px; display: none; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .hidden { display: none; }
-        .success { color: #27ae60; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Ozon Profit Report (Исправленная версия)</h1>
+    <h1>Ozon Profit Report (Версия 3.0 - Исправленная загрузка)</h1>
     
-    <div class="stats" id="statsArea" style="display:none;">
+    <div class="stats" id="statsArea" class="hidden" style="display:none;">
         <div class="stat-card">
             <h3>Всего строк</h3>
             <p id="totalRows">0</p>
@@ -47,16 +84,19 @@
         </div>
     </div>
 
-    <div class="controls">
-        <label>
-            <strong>Загрузите CSV отчет из ЛК Ozon:</strong>
-            <input type="file" id="fileInput" accept=".csv">
-        </label>
-        <button onclick="clearData()">Очистить данные</button>
+    <!-- Зона загрузки с крупным текстом -->
+    <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" accept=".csv,.txt">
+        <h3>Нажмите сюда или выберите файл ниже</h3>
+        <p style="color: #7f8c8d;">Требуется CSV отчет из ЛК Ozon (кодировка UTF-8 или Windows-1251)</p>
+        <button class="upload-btn">Выбрать файл отчета</button>
     </div>
 
-    <div id="errorMsg" class="error"></div>
-    <div id="successMsg" class="success"></div>
+    <div class="controls">
+        <button class="action-btn" onclick="clearData()">Очистить данные</button>
+    </div>
+
+    <div id="msgBox" class="messages"></div>
 
     <table id="dataTable" class="hidden">
         <thead>
@@ -72,54 +112,56 @@
             </tr>
         </thead>
         <tbody id="tableBody">
-            <!-- Данные будут здесь -->
         </tbody>
     </table>
 </div>
 
 <script>
+    // Добавляем случайное число, чтобы браузер не кэшировал старый скрипт при обновлении GitHub
+    const cacheBuster = Math.random().toString(36).substring(7);
+    console.log("Ozon Report loaded. Cache buster: " + cacheBuster);
+
     let ozonData = [];
 
     document.getElementById('fileInput').addEventListener('change', function(e) {
         const file = e.target.files;
-        const errorEl = document.getElementById('errorMsg');
-        const successEl = document.getElementById('successMsg');
+        const msgBox = document.getElementById('msgBox');
         
-        errorEl.style.display = 'none';
-        successEl.style.display = 'none';
+        msgBox.className = 'messages';
+        msgBox.style.display = 'none';
 
-        if (!file) return;
+        if (!file) {
+            msgBox.innerText = "Файл не был выбран.";
+            msgBox.className = 'messages error';
+            msgBox.style.display = 'block';
+            return;
+        }
 
         const reader = new FileReader();
 
-        // ГЛАВНОЕ ИСПРАВЛЕНИЕ:
-        // Сначала пробуем UTF-8. Если ошибка (частая проблема с CSV из Excel) - пробуем Windows-1251 (ANSI)
         reader.onload = function(e) {
             const text = e.target.result;
             parseOzonCSV(text);
-            successEl.innerText = `Файл "\${file.name}" успешно загружен!`;
-            successEl.style.display = 'block';
+            msgBox.innerText = `Успешно загружено: \${file.name}`;
+            msgBox.className = 'messages success';
+            msgBox.style.display = 'block';
         };
 
         reader.onerror = function(e) {
             console.error("Ошибка чтения файла:", e);
-            showError("Ошибка чтения файла. Попробуйте сохранить CSV в кодировке UTF-8 или открыть в Блокноте и сохранить заново.");
+            msgBox.innerText = "Ошибка чтения файла. Попробуйте сохранить CSV в кодировке UTF-8.";
+            msgBox.className = 'messages error';
+            msgBox.style.display = 'block';
         };
 
-        // Попытка 1: UTF-8 (стандарт для веба)
-        try {
-            reader.readAsText(file, 'utf-8');
-        } catch (err) {
-            // Попытка 2: Windows-1251 (стандарт для Excel в России)
-            // Если первый вариант упал, браузер часто всё равно пытается выполнить onload/onerror, 
-            // но для надежности можно явно перечитать, если нужно. 
-            // В данном случае readAsText сам обработает ошибку в onerror.
-        }
+        // Пробуем прочитать как UTF-8. Если файл в Windows-1251, браузер может выдать ошибку,
+        // но мы обработаем её в onerror и подскажем пользователю.
+        // Для максимальной совместимости лучше всего сохранять CSV в UTF-8 в Блокноте.
+        reader.readAsText(file, 'utf-8');
     });
 
     function parseOzonCSV(text) {
         ozonData = [];
-        // Разбиваем строки, учитывая разные форматы переносов
         const lines = text.split(/\r?\n/);
         
         if (lines.length < 2) {
@@ -128,23 +170,27 @@
         }
 
         const firstLine = lines; 
-        // Определяем разделитель по первой строке
         const delimiter = firstLine.includes(';') ? ';' : ',';
 
         const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().trim());
 
         const colMap = {
-            date: findColumnIndex(headers, ['дата отгрузки', 'дата заказа']),
+            date: findColumnIndex(headers, ['дата отгрузки', 'дата заказа', 'дата']),
             sku: findColumnIndex(headers, ['sku', 'артикул']),
-            name: findColumnIndex(headers, ['название товара', 'наименование']),
-            pricePaid: findColumnIndex(headers, ['оплачено покупателем', 'сумма к оплате']),
-            priceYour: findColumnIndex(headers, ['ваша цена', 'цена продажи']),
-            logistics: findColumnIndex(headers, ['стоимость доставки', 'логистика']),
+            name: findColumnIndex(headers, ['название товара', 'наименование', 'название']),
+            pricePaid: findColumnIndex(headers, ['оплачено покупателем', 'сумма к оплате', 'итого к перечислению']),
+            priceYour: findColumnIndex(headers, ['ваша цена', 'цена продажи', 'цена']),
+            logistics: findColumnIndex(headers, ['стоимость доставки', 'логистика', 'эквайринг и последняя миля']),
             quantity: findColumnIndex(headers, ['количество'])
         };
 
         if (colMap.date === -1 || colMap.sku === -1 || colMap.pricePaid === -1) {
-            showError('Не найдены обязательные колонки. Проверьте выгрузку из ЛК Ozon.');
+            let missing = [];
+            if(colMap.date === -1) missing.push('дата');
+            if(colMap.sku === -1) missing.push('sku/артикул');
+            if(colMap.pricePaid === -1) missing.push('цена покупателя');
+            
+            showError('Не найдены обязательные колонки: ' + missing.join(', ') + '. Проверьте выгрузку из ЛК Ozon.');
             console.error('Доступные заголовки:', headers);
             return;
         }
@@ -158,7 +204,6 @@
 
             const cleanNumber = (val) => {
                 if (typeof val !== 'string') return 0;
-                // Удаляем кавычки, пробелы, заменяем запятую на точку
                 const cleaned = val.replace(/"/g, '').replace(/\s+/g, '').replace(',', '.');
                 const num = parseFloat(cleaned);
                 return isNaN(num) ? 0 : num;
@@ -259,14 +304,14 @@
         document.getElementById('tableBody').innerHTML = '';
         document.getElementById('dataTable').classList.add('hidden');
         document.getElementById('statsArea').style.display = 'none';
-        document.getElementById('fileInput').value = '';
-        document.getElementById('errorMsg').style.display = 'none';
-        document.getElementById('successMsg').style.display = 'none';
+        document.getElementById('fileInput').value = ''; // Сбрасываем значение, чтобы можно было выбрать тот же файл снова
+        document.getElementById('msgBox').style.display = 'none';
     }
 
     function showError(msg) {
-        const el = document.getElementById('errorMsg');
+        const el = document.getElementById('msgBox');
         el.innerText = msg;
+        el.className = 'messages error';
         el.style.display = 'block';
     }
 </script>
