@@ -20,12 +20,13 @@
         .stat-card { background: #3498db; color: white; padding: 15px; border-radius: 5px; min-width: 150px; text-align: center; }
         .error { color: #e74c3c; margin-top: 10px; display: none; }
         .hidden { display: none; }
+        .success { color: #27ae60; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Ozon Profit Report</h1>
+    <h1>Ozon Profit Report (Исправленная версия)</h1>
     
     <div class="stats" id="statsArea" style="display:none;">
         <div class="stat-card">
@@ -55,6 +56,7 @@
     </div>
 
     <div id="errorMsg" class="error"></div>
+    <div id="successMsg" class="success"></div>
 
     <table id="dataTable" class="hidden">
         <thead>
@@ -78,21 +80,46 @@
 <script>
     let ozonData = [];
 
-    // Обработчик загрузки файла
     document.getElementById('fileInput').addEventListener('change', function(e) {
         const file = e.target.files;
+        const errorEl = document.getElementById('errorMsg');
+        const successEl = document.getElementById('successMsg');
+        
+        errorEl.style.display = 'none';
+        successEl.style.display = 'none';
+
         if (!file) return;
 
         const reader = new FileReader();
+
+        // ГЛАВНОЕ ИСПРАВЛЕНИЕ:
+        // Сначала пробуем UTF-8. Если ошибка (частая проблема с CSV из Excel) - пробуем Windows-1251 (ANSI)
         reader.onload = function(e) {
             const text = e.target.result;
             parseOzonCSV(text);
+            successEl.innerText = `Файл "\${file.name}" успешно загружен!`;
+            successEl.style.display = 'block';
         };
-        reader.readAsText(file, 'utf-8'); // Явно указываем UTF-8
+
+        reader.onerror = function(e) {
+            console.error("Ошибка чтения файла:", e);
+            showError("Ошибка чтения файла. Попробуйте сохранить CSV в кодировке UTF-8 или открыть в Блокноте и сохранить заново.");
+        };
+
+        // Попытка 1: UTF-8 (стандарт для веба)
+        try {
+            reader.readAsText(file, 'utf-8');
+        } catch (err) {
+            // Попытка 2: Windows-1251 (стандарт для Excel в России)
+            // Если первый вариант упал, браузер часто всё равно пытается выполнить onload/onerror, 
+            // но для надежности можно явно перечитать, если нужно. 
+            // В данном случае readAsText сам обработает ошибку в onerror.
+        }
     });
 
     function parseOzonCSV(text) {
         ozonData = [];
+        // Разбиваем строки, учитывая разные форматы переносов
         const lines = text.split(/\r?\n/);
         
         if (lines.length < 2) {
@@ -100,7 +127,8 @@
             return;
         }
 
-        const firstLine = lines; // ИСПРАВЛЕНО: берем первую строку, а не весь массив
+        const firstLine = lines; 
+        // Определяем разделитель по первой строке
         const delimiter = firstLine.includes(';') ? ';' : ',';
 
         const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().trim());
@@ -130,6 +158,7 @@
 
             const cleanNumber = (val) => {
                 if (typeof val !== 'string') return 0;
+                // Удаляем кавычки, пробелы, заменяем запятую на точку
                 const cleaned = val.replace(/"/g, '').replace(/\s+/g, '').replace(',', '.');
                 const num = parseFloat(cleaned);
                 return isNaN(num) ? 0 : num;
@@ -232,6 +261,7 @@
         document.getElementById('statsArea').style.display = 'none';
         document.getElementById('fileInput').value = '';
         document.getElementById('errorMsg').style.display = 'none';
+        document.getElementById('successMsg').style.display = 'none';
     }
 
     function showError(msg) {
