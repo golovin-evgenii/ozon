@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ozon Profit Report (Версия 4.1 - Anti-Bug Fix)</title>
+    <title>Ozon Profit Report (Версия 4.2 - Anti-Undefined Fix)</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f6f8; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         
         .version-badge {
             display: inline-block;
-            background: #27ae60; /* Зеленый цвет для успеха */
+            background: #8e44ad; /* Фиолетовый для новой версии */
             color: white;
             padding: 4px 10px;
             border-radius: 20px;
@@ -19,12 +19,7 @@
             margin-left: 10px;
             vertical-align: middle;
         }
-        .version-date {
-            color: #7f8c8d;
-            font-size: 13px;
-            margin-top: 5px;
-            font-style: italic;
-        }
+        .version-date { color: #7f8c8d; font-size: 13px; margin-top: 5px; font-style: italic; }
 
         h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
         
@@ -80,8 +75,8 @@
 <body>
 
 <div class="container">
-    <h1>Ozon Profit Report <span class="version-badge">Версия 4.1</span></h1>
-    <div class="version-date">Обновлено: 01.09.2025 15:00 (МСК) — Исправлена ошибка типа Blob</div>
+    <h1>Ozon Profit Report <span class="version-badge">Версия 4.2</span></h1>
+    <div class="version-date">Обновлено: 01.09.2025 16:00 (МСК) — Исправлена ошибка undefined function</div>
     
     <div class="stats" id="statsArea" style="display:none;">
         <div class="stat-card">
@@ -102,7 +97,7 @@
         </div>
     </div>
 
-    <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-zone" onclick="triggerFileInput()">
         <input type="file" id="fileInput" accept=".csv,.txt">
         <h3>Нажмите сюда или выберите файл ниже</h3>
         <p style="color: #7f8c8d;">Важно: файл должен быть в кодировке UTF-8.</p>
@@ -134,46 +129,49 @@
 </div>
 
 <script>
-    console.log('%c✅ Страница загружена. Версия 4.1 (Исправлен тип Blob)', 'color: green; font-size: 16px; font-weight: bold;');
+    console.log('%c✅ Страница загружена. Версия 4.2 (Защита от undefined)', 'color: purple; font-size: 16px; font-weight: bold;');
 
     let ozonData = [];
 
-    // Инициализация при загрузке страницы
+    // Функция для безопасного вызова выбора файла
+    function triggerFileInput() {
+        const input = document.getElementById('fileInput');
+        if (input) {
+            input.click();
+        } else {
+            console.error('Ошибка: Элемент fileInput не найден!');
+        }
+    }
+
+    // Инициализация после загрузки DOM
     document.addEventListener('DOMContentLoaded', () => {
         const fileInput = document.getElementById('fileInput');
         if (fileInput) {
-            // Убрали {once: true}, чтобы событие не пропадало
+            // Навешиваем событие напрямую, без риска потерять ссылку на функцию
             fileInput.addEventListener('change', handleFileSelect);
+        } else {
+            console.error('Ошибка: Не удалось найти input для файла.');
         }
     });
 
     function handleFileSelect(e) {
-        // ГЛАВНОЕ ИСПРАВЛЕНИЕ:
-        // Берем файл напрямую из target.files, без лишних проверок на клонирование
         const file = e.target.files;
         const msgBox = document.getElementById('msgBox');
         
-        // Сброс сообщений
         msgBox.className = 'messages';
         msgBox.style.display = 'none';
 
         if (!file) {
-            console.warn('Файл не выбран');
+            console.warn('Файл не выбран пользователем.');
             return;
-        }
-
-        // Проверка типа файла (опционально)
-        if (file.type !== '' && !file.type.includes('text') && !file.type.includes('csv')) {
-             // Для CSV тип часто пустой, поэтому не блокируем жестко, но логируем
         }
 
         const reader = new FileReader();
 
         reader.onload = function(e) {
             const text = e.target.result;
-            // Если текст пустой или мусор - это проблема файла, а не кода
             if (!text || text.length < 10) {
-                showError('Файл слишком маленький или пустой. Проверьте выгрузку из ЛК Ozon.');
+                showError('Файл пуст или поврежден. Проверьте выгрузку из ЛК Ozon.');
                 return;
             }
             parseOzonCSV(text);
@@ -185,29 +183,26 @@
 
         reader.onerror = function(e) {
             console.error("Ошибка чтения файла:", e);
-            showError("Ошибка чтения файла. Попробуйте сохранить CSV в Блокноте как UTF-8 еще раз.");
+            showError("Ошибка чтения файла. Попробуйте пересохранить CSV в Блокноте.");
         };
 
         // Читаем строго как UTF-8
         reader.readAsText(file, 'utf-8');
         
-        // ВАЖНО: Очищаем значение инпута, чтобы можно было выбрать ТОТ ЖЕ файл снова
-        // Это решает проблему, когда второй клик не срабатывает
+        // Сбрасываем значение, чтобы можно было выбрать тот же файл повторно
         e.target.value = ''; 
     }
 
     function parseOzonCSV(text) {
         ozonData = [];
-        // Разбиваем строки корректно для Windows и Mac
         const lines = text.split(/\r?\n/);
         
         if (lines.length < 2) {
-            showError('Файл пуст или содержит только заголовки');
+            showError('Файл содержит только заголовки или пуст.');
             return;
         }
 
         const firstLine = lines; 
-        // Определяем разделитель: если есть точка с запятой - это русский CSV
         const delimiter = firstLine.includes(';') ? ';' : ',';
 
         const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().trim());
@@ -342,9 +337,8 @@
         document.getElementById('statsArea').style.display = 'none';
         document.getElementById('msgBox').style.display = 'none';
         
-        // Просто очищаем инпут, не клонируем его. Это надежнее.
         const input = document.getElementById('fileInput');
-        input.value = '';
+        if (input) input.value = '';
     }
 
     function showError(msg) {
