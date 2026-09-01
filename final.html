@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ozon Profit Report (Версия 4.5 - Fixed Event)</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f6f8; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .version-badge { display: inline-block; background: #2c3e50; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; margin-left: 10px; vertical-align: middle; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .upload-zone { border: 2px dashed #3498db; padding: 40px; text-align: center; background: #f9fbfd; border-radius: 8px; margin-bottom: 20px; cursor: pointer; }
+        .upload-zone:hover { background: #eef2f7; border-color: #2980b9; }
+        .upload-zone input[type="file"] { display: none; }
+        .upload-btn { background: #3498db; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+        button.action-btn { padding: 10px 20px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .stats { display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap; }
+        .stat-card { background: #3498db; color: white; padding: 15px; border-radius: 5px; min-width: 150px; text-align: center; }
+        .messages { margin-top: 10px; padding: 10px; border-radius: 5px; display: none; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .debug-info { background: #eee; padding: 10px; margin-top: 10px; font-family: monospace; font-size: 12px; display: none; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Ozon Profit Report <span class="version-badge">Версия 4.5</span></h1>
+    
+    <div class="stats" id="statsArea" style="display:none;">
+        <div class="stat-card"><h3>Всего строк</h3><p id="totalRows">0</p></div>
+        <div class="stat-card"><h3>Выручка</h3><p id="totalRevenue">0 ₽</p></div>
+        <div class="stat-card"><h3>Комиссия</h3><p id="totalCommission">0 ₽</p></div>
+        <div class="stat-card"><h3>Логистика</h3><p id="totalLogistics">0 ₽</p></div>
+    </div>
+
+    <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+        <!-- ВАЖНО: Здесь обязательно должно быть (event) -->
+        <input type="file" id="fileInput" accept=".csv,.txt" onchange="handleFileSelect(event)">
+        <h3>Нажмите сюда или выберите файл ниже</h3>
+        <p style="color: #7f8c8d;">Важно: файл должен быть в кодировке UTF-8 и иметь расширение .csv</p>
+        <button class="upload-btn">Выбрать файл отчета</button>
+    </div>
+
+    <div class="controls">
+        <button class="action-btn" onclick="clearData()">Очистить данные</button>
+    </div>
+
+    <div id="msgBox" class="messages"></div>
+    <div id="debugBox" class="debug-info"></div>
+
+    <table id="dataTable" class="hidden">
+        <thead>
+            <tr>
+                <th>Дата</th><th>SKU</th><th>Название</th><th>Цена покупателя</th>
+                <th>Ваша цена</th><th>Комиссия</th><th>Логистика</th><th>Кол-во</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+    console.log('%c✅ Версия 4.5 запущена. Ждем файл...', 'color: green; font-size: 16px; font-weight: bold;');
+
+    function handleFileSelect(event) {
+        // 1. Получаем элемент input из события
+        const fileInput = event ? event.target : document.getElementById('fileInput');
+        
+        if (!fileInput) {
+            console.error('❌ Не удалось найти элемент input');
+            return;
+        }
+
+        const file = fileInput.files;
+        const msgBox = document.getElementById('msgBox');
+        const debugBox = document.getElementById('debugBox');
+        
+        msgBox.className = 'messages';
+        msgBox.style.display = 'none';
+        debugBox.style.display = 'block';
+        
+        // Формируем отчет для пользователя
+        let debugText = `<b>Диагностика:</b><br>`;
+        
+        if (file) {
+            debugText += `Имя файла: \${file.name}<br>`;
+            debugText += `Тип файла: \${file.type || 'Не определен браузером'}<br>`;
+            debugText += `Размер: \${file.size} байт<br>`;
+            debugText += `Является Blob: \${file instanceof Blob}<br>`;
+        } else {
+            debugText += `Файл не выбран (files равен undefined).<br>`;
+            debugText += `Проверьте, правильно ли вы передали event в функцию.<br>`;
+        }
+        debugBox.innerHTML = debugText;
+
+        if (!file) {
+            showError('Файл не был выбран. Проверьте консоль на наличие ошибок передачи события.');
+            return;
+        }
+
+        // Дополнительная проверка типа
+        if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
+            const warnMsg = `⚠️ Внимание! Вы выбрали файл типа "\${file.name}".<br>
+            Рекомендуется использовать файлы .csv или .txt в кодировке UTF-8.`;
+            debugBox.innerHTML += `<br><span style="color:orange">\${warnMsg}</span>`;
+            console.warn(warnMsg);
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = function(loadEvent) {
+            const text = loadEvent.target.result;
+            if (!text || text.length < 10) {
+                showError('Файл пуст или содержит менее 10 символов.');
+                return;
+            }
+            debugBox.innerHTML += `<br>Файл успешно прочитан (первые 50 символов):<br><code>\${text.substring(0, 50)}</code>`;
+            parseOzonCSV(text);
+        };
+
+        reader.onerror = function(err) {
+            console.error("Ошибка чтения:", err);
+            showError('Ошибка чтения файла. Возможно, файл поврежден или имеет неверную кодировку.');
+        };
+
+        reader.readAsText(file, 'UTF-8');
+        fileInput.value = ''; // Сброс для повторной загрузки того же файла
+    }
+
+    function parseOzonCSV(text) {
+        const lines = text.split(/\r?\n/);
+        if (lines.length < 2) {
+            showError('Файл содержит только заголовки или пуст.');
+            return;
+        }
+
+        const firstLine = lines;
+        const delimiter = firstLine.includes(';') ? ';' : ',';
+        const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().trim());
+
+        const colMap = {
+            date: findColumnIndex(headers, ['дата отгрузки', 'дата заказа', 'дата']),
+            sku: findColumnIndex(headers, ['sku', 'артикул']),
+            name: findColumnIndex(headers, ['название товара', 'наименование', 'название']),
+            pricePaid: findColumnIndex(headers, ['оплачено покупателем', 'сумма к оплате']),
+            priceYour: findColumnIndex(headers, ['ваша цена', 'цена продажи']),
+            logistics: findColumnIndex(headers, ['стоимость доставки', 'логистика'])
+        };
+
+        let totalRevenue = 0;
+        let totalCommission = 0;
+        let totalLogistics = 0;
+        let rowCount = 0;
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            const cols = parseCSVLine(lines[i], delimiter);
+            
+            if (!cols[colMap.date] || !cols[colMap.sku]) continue;
+
+            const cleanNum = (val) => parseFloat((val || '').replace(/,/g, '.').replace(/[^\d.-]/g, '')) || 0;
+
+            const pricePaid = cleanNum(cols[colMap.pricePaid]);
+            const priceYour = cleanNum(cols[colMap.priceYour]);
+            const log = cleanNum(cols[colMap.logistics]);
+
+            totalRevenue += pricePaid;
+            totalCommission += (priceYour - pricePaid);
+            totalLogistics += log;
+            rowCount++;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>\${cols[colMap.date]}</td>
+                <td>\${cols[colMap.sku]}</td>
+                <td>\${cols[colMap.name] || '-'}</td>
+                <td>\${pricePaid.toLocaleString('ru-RU')}</td>
+                <td>\${priceYour.toLocaleString('ru-RU')}</td>
+                <td>\${(priceYour - pricePaid).toLocaleString('ru-RU')}</td>
+                <td>\${log.toLocaleString('ru-RU')}</td>
+                <td>1</td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        document.getElementById('totalRows').innerText = rowCount;
+        document.getElementById('totalRevenue').innerText = totalRevenue.toLocaleString('ru-RU') + ' ₽';
+        document.getElementById('totalCommission').innerText = totalCommission.toLocaleString('ru-RU') + ' ₽';
+        document.getElementById('totalLogistics').innerText = totalLogistics.toLocaleString('ru-RU') + ' ₽';
+        
+        document.getElementById('statsArea').style.display = 'flex';
+        document.getElementById('dataTable').classList.remove('hidden');
+        
+        showMessage('Файл успешно обработан!', 'success');
+    }
+
+    function parseCSVLine(line, delimiter) {
+        return line.split(delimiter);
+    }
+
+    function findColumnIndex(headers, keywords) {
+        for (let i = 0; i < headers.length; i++) {
+            for (const k of keywords) {
+                if (headers[i].includes(k)) return i;
+            }
+        }
+        return -1;
+    }
+
+    function showMessage(msg, type) {
+        const el = document.getElementById('msgBox');
+        el.innerText = msg;
+        el.className = `messages \${type}`;
+        el.style.display = 'block';
+    }
+
+    function showError(msg) {
+        showMessage(msg, 'error');
+    }
+
+    function clearData() {
+        const input = document.getElementById('fileInput');
+        if(input) input.value = '';
+        document.getElementById('statsArea').style.display = 'none';
+        document.getElementById('dataTable').classList.add('hidden');
+        document.getElementById('msgBox').style.display = 'none';
+        document.getElementById('debugBox').style.display = 'none';
+        document.getElementById('tableBody').innerHTML = '';
+    }
+</script>
+</body>
+</html>
