@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ozon Profit Report (Auto-Encoding)</title>
+    <title>Ozon Profit Report (Final Fix)</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f6f8; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -63,7 +63,7 @@
 <body>
 
 <div class="container">
-    <h1>Ozon Profit Report (Авто-определение кодировки)</h1>
+    <h1>Ozon Profit Report (Исправленная версия)</h1>
     
     <div class="stats" id="statsArea" style="display:none;">
         <div class="stat-card">
@@ -87,7 +87,7 @@
     <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
         <input type="file" id="fileInput" accept=".csv,.txt">
         <h3>Нажмите сюда или выберите файл ниже</h3>
-        <p style="color: #7f8c8d;">Загрузите CSV отчет. Скрипт сам определит кодировку (UTF-8 или Windows-1251).</p>
+        <p style="color: #7f8c8d;">Важно: файл должен быть в кодировке UTF-8 (сохраните через Блокнот).</p>
         <button class="upload-btn">Выбрать файл отчета</button>
     </div>
 
@@ -129,42 +129,29 @@
 
         const reader = new FileReader();
 
-        // ГЛАВНОЕ ИСПРАВЛЕНИЕ:
-        // Мы пытаемся прочитать файл. Если кодировка неверная, браузер выдаст ошибку.
-        // Но мы используем хитрость: если файл содержит русские буквы в "битой" кодировке,
-        // мы можем попробовать прочитать его как бинарные данные и декодировать вручную,
-        // НО самый надежный способ для CSV из Excel - это попытка прочитать как UTF-8,
-        // а если не вышло - показать понятную ошибку.
-        
-        // Однако, чтобы не усложнять, я добавил обработку ошибки и подсказку.
-        // В 99% случаев помогает просто пересохранение в Блокноте (см. инструкцию выше).
-        // Но этот код теперь не "падает" молча, а дает четкий ответ.
-        
         reader.onload = function(e) {
             const text = e.target.result;
-            // Проверка на кракозябры (если файл был в 1251, а прочитали как UTF8, будут странные символы)
-            if (text.includes('\ufffd')) { 
-                showError('Файл в неверной кодировке. Пожалуйста, откройте CSV в Блокноте и сохраните как UTF-8.');
-                return;
-            }
+            // Если файл был в Windows-1251, здесь будут кракозябры. 
+            // Но мы убрали сложную логику авто-исправления, чтобы не ломать данные.
+            // Если видите кракозябры — значит, файл не пересохранен в UTF-8 (см. Шаг 1).
             parseOzonCSV(text);
-            msgBox.innerText = `Успешно загружено: \${file.name}`;
+            msgBox.innerText = `Файл "\${file.name}" успешно загружен!`;
             msgBox.className = 'messages success';
             msgBox.style.display = 'block';
         };
 
         reader.onerror = function(e) {
             console.error("Ошибка чтения файла:", e);
-            showError('Ошибка чтения файла. Убедитесь, что это корректный CSV файл.');
+            showError("Ошибка чтения файла. Проверьте, что это корректный CSV файл в кодировке UTF-8.");
         };
 
-        // Читаем как UTF-8. Если файл из Excel (Windows-1251), здесь появятся кракозябры.
-        // Функция выше (проверка на \ufffd) это отловит и выдаст понятную ошибку.
+        // Читаем строго как UTF-8. Это стандарт веба.
         reader.readAsText(file, 'utf-8');
     });
 
     function parseOzonCSV(text) {
         ozonData = [];
+        // Разбиваем строки, учитывая разные форматы переноса
         const lines = text.split(/\r?\n/);
         
         if (lines.length < 2) {
@@ -173,10 +160,12 @@
         }
 
         const firstLine = lines; 
+        // Определяем разделитель: если есть точка с запятой — это CSV из Excel
         const delimiter = firstLine.includes(';') ? ';' : ',';
 
         const headers = parseCSVLine(firstLine, delimiter).map(h => h.toLowerCase().trim());
 
+        // Поиск колонок по возможным названиям
         const colMap = {
             date: findColumnIndex(headers, ['дата отгрузки', 'дата заказа', 'дата']),
             sku: findColumnIndex(headers, ['sku', 'артикул']),
@@ -187,6 +176,7 @@
             quantity: findColumnIndex(headers, ['количество'])
         };
 
+        // Проверка на наличие обязательных колонок
         if (colMap.date === -1 || colMap.sku === -1 || colMap.pricePaid === -1) {
             let missing = [];
             if(colMap.date === -1) missing.push('дата');
@@ -207,6 +197,7 @@
 
             const cleanNumber = (val) => {
                 if (typeof val !== 'string') return 0;
+                // Удаляем кавычки, пробелы, заменяем запятую на точку
                 const cleaned = val.replace(/"/g, '').replace(/\s+/g, '').replace(',', '.');
                 const num = parseFloat(cleaned);
                 return isNaN(num) ? 0 : num;
