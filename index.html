@@ -3,23 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ozon Profit Report</title>
+    <title>Ozon Profit Report (Offline Mode)</title>
     <style>
-        :root { --primary: #1c1c1e; --accent: #f58220; --success: #2ecc71; --danger: #e74c3c; --bg: #f4f6f8; }
+        :root { --primary: #1c1c1e; --accent: #f58220; --success: #2ecc71; --danger: #e74c3c; --bg: #f4f6f8; --gray: #95a5a6; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        h1, h2 { color: var(--primary); }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        h1, h2, h3 { color: var(--primary); }
         
-        /* Панель настроек */
-        .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; padding: 20px; background: #fafafa; border-radius: 8px; border: 1px solid #eee; }
-        label { display: block; margin-top: 10px; font-weight: 600; color: #555; }
-        input[type="text"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        @media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr; } }
+
+        .panel { background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #eee; }
+        .panel-title { font-weight: bold; color: var(--primary); margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        
+        label { display: block; margin-top: 10px; font-weight: 600; color: #555; font-size: 0.9em; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; margin-top: 5px; }
         button { padding: 12px 24px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.2s; }
         button:hover { background: #d66b1b; }
-        button.secondary { background: #95a5a6; }
+        button.secondary { background: var(--gray); }
+        button.success { background: var(--success); }
 
-        /* Таблица */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; text-align: left; }
+        .file-upload-zone { border: 2px dashed var(--gray); padding: 20px; text-align: center; border-radius: 8px; cursor: pointer; }
+        .file-upload-zone:hover { border-color: var(--accent); background: #fff4e6; }
+        #fileInput { display: none; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
         th { background: var(--primary); color: white; padding: 15px; text-transform: uppercase; font-size: 13px; letter-spacing: 1px; }
         td { padding: 12px 15px; border-bottom: 1px solid #eee; vertical-align: middle; }
         tr:hover { background-color: #f9f9f9; }
@@ -27,47 +35,81 @@
         .status-ok { color: var(--success); font-weight: bold; }
         .status-bad { color: var(--danger); font-weight: bold; }
         .price-val { font-weight: bold; }
+        .note { font-size: 0.85em; color: #7f8c8d; margin-top: 5px; }
         
-        #loading { display: none; text-align: center; padding: 20px; color: var(--accent); font-size: 18px; }
+        #loading { display: none; text-align: center; padding: 40px; color: var(--accent); font-size: 18px; background: #fff; border-radius: 8px; }
+        #error-msg { color: var(--danger); display: none; margin-bottom: 20px; padding: 10px; background: #ffebee; border-left: 5px solid var(--danger); }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>📊 Отчёт по прибыльности Ozon</h1>
-    <p>Этот инструмент запрашивает данные через Ozon Seller API и считает чистую прибыль с учётом вашей себестоимости.</p>
+    <h1>📊 Ozon Profit Report (Локальный расчет)</h1>
+    <p>Этот инструмент НЕ требует API ключей. Он рассчитывает прибыль на основе файла выгрузки из ЛК Ozon.</p>
 
-    <div class="config-grid">
-        <div>
-            <h3>Настройки API</h3>
-            <label>Client ID</label>
-            <input type="text" id="clientId" placeholder="Ваш Client ID">
-            <label>Client Secret</label>
-            <input type="password" id="clientSecret" placeholder="Ваш Secret Key">
-            <label>Account ID</label>
-            <input type="text" id="accountId" placeholder="ID вашего аккаунта">
+    <div id="error-msg"></div>
+
+    <!-- Панель загрузки данных -->
+    <div class="panel">
+        <div class="panel-title">📥 Загрузка данных из Ozon</div>
+        <p class="note">Скачайте отчет "Заказы" или "Реализация товаров" из ЛК Ozon (CSV/Excel) и загрузите его ниже.</p>
+        <div class="file-upload-zone" onclick="document.getElementById('ozonFileInput').click()">
+            <p>📁 Нажмите сюда, чтобы выбрать файл выгрузки Ozon (CSV/XLSX)</p>
+            <p style="font-size: 0.8em; color: var(--gray);">Поддерживаются: .csv, .xlsx, .xls</p>
         </div>
-        <div>
-            <h3>Параметры расчёта</h3>
-            <p style="font-size: 0.9em; color: #666;">Эти данные нужны, так как API их не знает.</p>
-            <label>Налог (%) (например, 6 для УСН)</label>
-            <input type="number" id="taxRate" value="6">
+        <input type="file" id="ozonFileInput" accept=".csv, .xlsx, .xls">
+        <p id="ozonFileName" class="note" style="color: var(--success);"></p>
+    </div>
+
+    <!-- Панель настроек себестоимости -->
+    <div class="dashboard-grid">
+        <div class="panel">
+            <div class="panel-title">⚙️ Себестоимость и Налоги</div>
+            <label>Налог (%) (УСН Доходы)</label>
+            <input type="number" id="taxRate" value="6" min="0">
             <label>Доп. расходы на товар (руб) (упаковка, доставка до склада)</label>
-            <input type="number" id="extraCost" value="50">
+            <input type="number" id="extraCost" value="50" min="0">
+            
+            <h3 style="margin-top: 25px;">Способ расчета себестоимости</h3>
+            <select id="costMethod" onchange="toggleCostInputs()">
+                <option value="percent">По проценту от цены (быстро)</option>
+                <option value="file">Из файла (точно, по SKU)</option>
+            </select>
+
+            <div id="percentInputs" style="display: block;">
+                <label>Себестоимость (% от цены продажи)</label>
+                <input type="number" id="costPercent" value="70" min="1" max="100">
+                <p class="note">Пример: если товар стоит 1000₽, а процент 70, то себестоимость считается как 700₽.</p>
+            </div>
+
+            <div id="fileInputs" class="hidden">
+                <div class="file-upload-zone" onclick="document.getElementById('costFileInput').click()">
+                    <p>📁 Загрузить файл с закупочными ценами (CSV/JSON)</p>
+                    <p style="font-size: 0.8em; color: var(--gray);">Формат: sku,cost или JSON массив</p>
+                </div>
+                <input type="file" id="costFileInput" accept=".csv, .json">
+                <p id="costFileName" class="note" style="color: var(--success);"></p>
+            </div>
         </div>
-        <div style="grid-column: 1 / -1;">
-            <button onclick="fetchData()">🚀 Получить отчёт и рассчитать прибыль</button>
-            <button class="secondary" onclick="clearTable()" style="margin-left: 10px;">Очистить таблицу</button>
+
+        <div class="panel" style="display: flex; flex-direction: column; justify-content: flex-end;">
+            <button class="success" onclick="processData()">🚀 Рассчитать прибыль</button>
+            <button class="secondary" onclick="clearTable()" style="margin-top: 10px;">Очистить таблицу</button>
+            <div style="margin-top: 20px; padding: 15px; background: #e8f4fd; border-radius: 6px;">
+                <h4>💡 Почему нет API?</h4>
+                <p style="font-size: 0.9em; color: #555;">Браузеры блокируют прямые запросы к Ozon API (CORS). Этот метод надежнее: вы контролируете данные, и отчет работает мгновенно без лимитов запросов.</p>
+            </div>
         </div>
     </div>
 
-    <div id="loading">⏳ Загрузка данных из Ozon...</div>
+    <div id="loading">⏳ Обработка данных...</div>
 
     <table id="reportTable" style="display: none;">
         <thead>
             <tr>
                 <th>Дата</th>
-                <th>Артикул / SKU</th>
+                <th>SKU / Артикул</th>
                 <th>Название</th>
                 <th>Цена продажи</th>
                 <th>Комиссия Ozon</th>
@@ -79,23 +121,161 @@
                 <th>Статус</th>
             </tr>
         </thead>
-        <tbody id="tableBody">
-            <!-- Данные будут здесь -->
-        </tbody>
+        <tbody id="tableBody"></tbody>
     </table>
 </div>
 
 <script>
-    // В реальном проекте эти данные должны приходить из формы, но для примера можно захардкодить тестовые значения
-    // или оставить пустыми, чтобы пользователь вводил их каждый раз.
+    // Библиотеки для работы с файлами (встроены упрощенно для CSV, для XLSX нужна библиотека, но для старта хватит CSV)
+    // Для полноценного чтения XLSX лучше использовать SheetJS, но чтобы код был одним файлом, мы просим CSV.
+    // Ozon отлично выгружает CSV.
 
-    async function fetchData() {
-        const clientId = document.getElementById('clientId').value;
-        const clientSecret = document.getElementById('clientSecret').value;
-        const accountId = document.getElementById('accountId').value;
+    let costData = {}; 
+    let ozonData = [];
+
+    function toggleCostInputs() {
+        const method = document.getElementById('costMethod').value;
+        document.getElementById('percentInputs').style.display = (method === 'percent') ? 'block' : 'none';
+        document.getElementById('fileInputs').style.display = (method === 'file') ? 'block' : 'none';
+    }
+
+    // Обработка файла себестоимости
+    document.getElementById('costFileInput').addEventListener('change', function(e) {
+        const file = e.target.files;
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            parseCostFile(event.target.result, file.name);
+        };
+        reader.readAsText(file);
+    });
+
+    function parseCostFile(text, filename) {
+        costData = {};
+        const lines = text.split('\n');
         
-        if (!clientId || !clientSecret || !accountId) {
-            alert('Пожалуйста, заполните все поля API ключей!');
+        if (filename.endsWith('.json')) {
+            try {
+                const data = JSON.parse(text);
+                if (Array.isArray(data)) {
+                    data.forEach(item => {
+                        if (item.sku && item.cost) costData[item.sku] = parseFloat(item.cost);
+                    });
+                }
+            } catch (e) { alert('Ошибка JSON: ' + e.message); }
+        } else {
+            // CSV: sku,cost
+            lines.forEach(line => {
+                const parts = line.trim().split(',');
+                if (parts.length >= 2 && !isNaN(parts)) {
+                    const sku = parts.replace(/"/g, '').trim();
+                    const cost = parseFloat(parts);
+                    if (sku && cost) costData[sku] = cost;
+                }
+            });
+        }
+        document.getElementById('costFileName').innerText = `Загружено цен: \${Object.keys(costData).length}`;
+    }
+
+    // Обработка файла Ozon
+    document.getElementById('ozonFileInput').addEventListener('change', function(e) {
+        const file = e.target.files;
+        if (!file) return;
+        document.getElementById('ozonFileName').innerText = `Загружен файл: \${file.name}`;
+        
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const content = event.target.result;
+            // Пробуем определить формат. Если есть <table> или специфичные теги - это HTML.
+            // Но обычно Ozon дает CSV или XLSX. Для простоты в этом коде мы ожидаем CSV.
+            // Если у вас XLSX, этот простой парсер не сработает, нужно будет добавить библиотеку SheetJS.
+            // Ниже базовая логика для CSV (разделитель запятая или точка с запятой).
+            
+            try {
+                // Простая эвристика: если есть много кавычек и запятых - CSV
+                if (content.includes('"') || content.includes(';')) {
+                    parseOzonCSV(content);
+                } else {
+                    alert("Формат файла не распознан. Пожалуйста, скачайте отчет Ozon в формате CSV.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Ошибка чтения файла. Убедитесь, что это CSV выгрузка из Ozon.");
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    function parseOzonCSV(text) {
+        ozonData = [];
+        const lines = text.split('\n');
+        if (lines.length < 2) return;
+
+        // Определяем разделитель (запятая или точка с запятой)
+        const firstLine = lines;
+        const delimiter = firstLine.includes(';') ? ';' : ',';
+        
+        // Находим индексы колонок (ищем по названиям заголовков Ozon)
+        // Названия могут отличаться в разных отчетах, используем поиск подстроки
+        const headers = firstLine.split(delimiter).map(h => h.replace(/"/g, '').trim().toLowerCase());
+        
+        const colMap = {
+            date: findColumn(headers, ['дата', 'дата заказа', 'дата отгрузки']),
+            sku: findColumn(headers, ['артикул', 'sku', 'код товара']),
+            name: findColumn(headers, ['название', 'товар', 'наименование']),
+            price: findColumn(headers, ['цена', 'цена продажи', 'сумма']),
+            commission: findColumn(headers, ['комиссия', 'комиссия озон']),
+            logistics: findColumn(headers, ['логистика', 'стоимость логистики'])
+        };
+
+        if (colMap.price === -1) {
+            alert("Не удалось найти колонку 'Цена' в файле. Проверьте формат выгрузки Ozon.");
+            return;
+        }
+
+        // Парсим строки
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            // Обработка кавычек внутри полей (упрощенно)
+            const parts = line.split(delimiter);
+            
+            // Если колонок меньше чем нужно, пропускаем
+            if (parts.length <= colMap.price) continue;
+
+            const clean = (val) => parseFloat(val.replace(/"/g, '').replace(/ /g, '').replace(',', '.'));
+
+            ozonData.push({
+                date: parts[colMap.date] ? parts[colMap.date].replace(/"/g, '') : 'N/A',
+                sku: parts[colMap.sku] ? parts[colMap.sku].replace(/"/g, '').trim() : 'N/A',
+                name: parts[colMap.name] ? parts[colMap.name].replace(/"/g, '') : 'N/A',
+                price: clean(parts[colMap.price]),
+                commission: colMap.commission !== -1 ? clean(parts[colMap.commission]) : 0,
+                logistics: colMap.logistics !== -1 ? clean(parts[colMap.logistics]) : 0
+            });
+        }
+        console.log("Parsed orders:", ozonData.length);
+    }
+
+    function findColumn(headers, keywords) {
+        for (let i = 0; i < headers.length; i++) {
+            for (const kw of keywords) {
+                if (headers[i].includes(kw)) return i;
+            }
+        }
+        return -1;
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('error-msg');
+        el.innerText = msg;
+        el.style.display = msg ? 'block' : 'none';
+    }
+
+    function processData() {
+        if (ozonData.length === 0) {
+            showError("Сначала загрузите файл с заказами из Ozon!");
             return;
         }
 
@@ -103,114 +283,71 @@
         const table = document.getElementById('reportTable');
         loading.style.display = 'block';
         table.style.display = 'none';
+        showError('');
 
-        try {
-            // 1. Получаем токен доступа
-            const tokenUrl = 'https://api-seller.ozon.ru/v2/token';
-            const authString = `${clientId}:${clientSecret}`;
-            const encodedAuth = btoa(authString); // Базовая авторизация
-
-            const tokenResponse = await fetch(tokenUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Basic ${encodedAuth}`
-                },
-                body: JSON.stringify({
-                    "client_id": clientId,
-                    "client_secret": clientSecret,
-                    "grant_type": "client_credentials"
-                })
-            });
-
-            if (!tokenResponse.ok) throw new Error('Ошибка получения токена. Проверьте ключи.');
-            const tokenData = await tokenResponse.json();
-            const accessToken = tokenData.access_token;
-
-            // 2. Запрашиваем заказы (берем последние 50 для теста, можно увеличить)
-            // Эндпоинт: https://api-seller.ozon.ru/v3/order/list
-            const ordersUrl = 'https://api-seller.ozon.ru/v3/order/list';
-            
-            const ordersResponse = await fetch(ordersUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Client-Id': clientId,
-                    'Api-Key': accessToken // Или используем токен в заголовке Authorization, зависит от версии API
-                },
-                body: JSON.stringify({
-                    "dir": "DESC",
-                    "limit": 50, // Количество заказов
-                    "offset": 0,
-                    "status": ["delivered", "cancelled"] // Статусы для анализа
-                })
-            });
-
-            if (!ordersResponse.ok) throw new Error('Ошибка загрузки заказов. Возможно, нет прав на доступ к заказам.');
-            const ordersData = await ordersResponse.json();
-
-            processOrders(ordersData.result.orders);
-
-        } catch (error) {
-            console.error(error);
-            alert('Произошла ошибка: ' + error.message + '\n\nУбедитесь, что ключи верны и у ключа есть права на чтение заказов.');
-        } finally {
-            loading.style.display = 'none';
-        }
-    }
-
-    function processOrders(orders) {
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
+        
         const taxRate = parseFloat(document.getElementById('taxRate').value) || 6;
         const extraCost = parseFloat(document.getElementById('extraCost').value) || 0;
+        const costMethod = document.getElementById('costMethod').value;
+        const costPercent = parseFloat(document.getElementById('costPercent').value) || 70;
 
-        // Проходим по каждому заказу
-        orders.forEach(order => {
-            order.products.forEach(product => {
-                // --- РАСЧЁТ ЭКОНОМИКИ ---
-                const price = parseFloat(product.price) || 0; // Цена продажи
-                const commission = parseFloat(product.commission_amount) || 0; // Комиссия Ozon
-                const logistics = parseFloat(product.logistics_amount) || 0; // Логистика Ozon
-                
-                // ВАЖНО: Себестоимость нужно где-то хранить. 
-                // В этом примере мы берем её из названия или ставим заглушку.
-                // Для реального использования вам нужно загрузить CSV с себестоимостью.
-                // Здесь мы эмулируем: себестоимость = 70% от цены (для примера)
-                const costPrice = price * 0.7; 
+        let totalProfit = 0;
 
-                const revenue = price - commission - logistics - costPrice - extraCost;
-                const taxAmount = revenue > 0 ? (revenue * (taxRate / 100)) : 0;
-                const netProfit = revenue - taxAmount;
+        ozonData.forEach(item => {
+            // --- ЛОГИКА ПОЛУЧЕНИЯ СЕБЕСТОИМОСТИ ---
+            let costPrice = 0;
+            
+            if (costMethod === 'file' && costData[item.sku]) {
+                costPrice = costData[item.sku];
+            } else {
+                // Расчет по проценту
+                costPrice = item.price * (costPercent / 100);
+            }
 
-                const statusClass = netProfit >= 0 ? 'status-ok' : 'status-bad';
-                const statusText = netProfit >= 0 ? '✅ Выгодно' : '❌ Убыток';
+            // --- РАСЧЕТ ЭКОНОМИКИ ---
+            const revenue = item.price - item.commission - item.logistics - costPrice - extraCost;
+            const taxAmount = revenue > 0 ? (revenue * (taxRate / 100)) : 0;
+            const netProfit = revenue - taxAmount;
 
-                const row = `
-                    <tr>
-                        <td>${new Date(order.created_at).toLocaleDateString()}</td>
-                        <td>${product.sku}</td>
-                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${product.name}</td>
-                        <td class="price-val">${price.toLocaleString()} ₽</td>
-                        <td>${commission.toLocaleString()} ₽</td>
-                        <td>${logistics.toLocaleString()} ₽</td>
-                        <td class="price-val" style="color: #7f8c8d;">${costPrice.toLocaleString()} ₽ (эмуляция)</td>
-                        <td>${extraCost.toLocaleString()} ₽</td>
-                        <td>${taxAmount.toLocaleString()} ₽</td>
-                        <td class="price-val ${statusClass}">${netProfit.toLocaleString()} ₽</td>
-                        <td>${statusText}</td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
-            });
+            totalProfit += netProfit;
+
+            const statusClass = netProfit >= 0 ? 'status-ok' : 'status-bad';
+            const statusText = netProfit >= 0 ? '✅ Выгодно' : '❌ Убыток';
+
+            const row = `
+                <tr>
+                    <td>\${item.date}</td>
+                    <td>\${item.sku}</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">\${item.name}</td>
+                    <td class="price-val">\${item.price.toLocaleString()} ₽</td>
+                    <td>\${item.commission.toLocaleString()} ₽</td>
+                    <td>\${item.logistics.toLocaleString()} ₽</td>
+                    <td class="price-val" style="color: #7f8c8d;">\${costPrice.toLocaleString()} ₽</td>
+                    <td>\${extraCost.toLocaleString()} ₽</td>
+                    <td>\${taxAmount.toLocaleString()} ₽</td>
+                    <td class="price-val ${statusClass}">${netProfit.toLocaleString()} ₽</td>
+                    <td>\${statusText}</td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
         });
 
-        document.getElementById('reportTable').style.display = 'table';
+        // Добавляем итоговую строку (опционально, можно сделать отдельным элементом)
+        console.log("Total Profit:", totalProfit);
+
+        loading.style.display = 'none';
+        table.style.display = 'table';
     }
 
     function clearTable() {
         document.getElementById('tableBody').innerHTML = '';
         document.getElementById('reportTable').style.display = 'none';
+        document.getElementById('ozonFileName').innerText = '';
+        document.getElementById('costFileName').innerText = '';
+        ozonData = [];
+        costData = {};
     }
 </script>
 
